@@ -1,0 +1,5 @@
+{
+  "name": "NFC Keychain Journey (大象女士)",
+  "description": "An interactive storytelling web app for NFC keychains. Tracks the journey of a physical object as it is passed from person to person based on emotional prompts.",
+  "requestFramePermissions": []
+}
