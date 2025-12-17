@@ -79,18 +79,30 @@ function App() {
     setGlobalStore(newStore);
 
     // Save to Supabase
-    // CRITICAL FIX: The database 'id' column is likely type 'bigint' (auto-increment),
-    // but the frontend generates a UUID string. We must exclude 'id' from the insert
-    // so Supabase generates it automatically.
-    const { id, ...eventForDb } = event;
+    // CRITICAL FIX: The DB 'id' is BigInt (auto-generated), but 'event.id' is a UUID string.
+    // We explicitly construct the payload to ensure 'id' is NEVER sent to Supabase.
+    // Using destructuring { id, ...rest } is safer, but explicit mapping is clearest.
+    
+    const payload = {
+      keychain_id: event.keychain_id,
+      timestamp: event.timestamp,
+      from_name: event.from_name,
+      to_name: event.to_name,
+      prompt_key: event.prompt_key,
+      prompt_text: event.prompt_text,
+      next_prompt_key: event.next_prompt_key || null, // Ensure optional fields are handled
+      next_prompt_text: event.next_prompt_text || null
+    };
+
+    console.log('Saving to Supabase (Payload):', payload);
 
     const { error } = await supabase
       .from('NFC Keychain Journey events')
-      .insert([eventForDb]);
+      .insert([payload]);
     
     if (error) {
       console.error('Failed to save to cloud:', error);
-      alert('儲存到雲端失敗，請檢查網絡。');
+      alert('儲存到雲端失敗，請檢查網絡。詳細錯誤: ' + error.message);
     }
   };
 
