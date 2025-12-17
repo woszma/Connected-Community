@@ -14,15 +14,18 @@ export const PROMPT_POOL: Prompt[] = [
   { key: 'LONG_TIME_NO_SEE', text: '好耐無見嘅舊朋友' },
 ];
 
-export const INITIAL_HISTORY_SEED = [
+// Note: In Supabase, these initial seeds should ideally be inserted into the DB manually once.
+// But we keep this structure for type consistency if needed.
+export const INITIAL_HISTORY_SEED: any[] = [
   {
     id: 'seed-1',
+    keychain_id: '0',
     timestamp: Date.now() - 10000000,
-    fromName: '大象女士',
-    toName: '阿明',
-    promptKey: 'START',
-    promptText: '開始旅程',
-    nextPromptKey: 'MOST_WORRIED',
-    nextPromptText: '最擔心嘅人'
+    from_name: '大象女士',
+    to_name: '阿明',
+    prompt_key: 'START',
+    prompt_text: '開始旅程',
+    next_prompt_key: 'MOST_WORRIED',
+    next_prompt_text: '最擔心嘅人'
   }
 ];

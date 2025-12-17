@@ -1,56 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Screen, HistoryEvent, GlobalStore } from './types';
-import { PROMPT_POOL, INITIAL_HISTORY_SEED } from './constants';
+import { PROMPT_POOL } from './constants';
 import { Landing } from './components/screens/Landing';
 import { Returning } from './components/screens/Returning';
 import { NewInput } from './components/screens/NewInput';
 import { Explanation } from './components/screens/Explanation';
 import { HistoryView } from './components/screens/History';
 import { AdminDashboard } from './components/screens/AdminDashboard';
-
-// --- SIMULATED DATABASE SERVICE LAYER ---
-// In a real app, replace these functions with Firebase/Supabase calls.
-
-const STORAGE_KEY = 'nfc_keychain_global_store';
-
-const fetchAllData = (): GlobalStore => {
-  const json = localStorage.getItem(STORAGE_KEY);
-  if (!json) {
-    // Initialize with some dummy data for Demo purposes
-    const initialStore: GlobalStore = {
-      "0": INITIAL_HISTORY_SEED,
-      "8": [
-        { ...INITIAL_HISTORY_SEED[0], id: 'demo-8', toName: '嘉嘉', timestamp: Date.now() - 50000000 },
-        { 
-          id: 'demo-9', 
-          timestamp: Date.now() - 100000, 
-          fromName: '嘉嘉', 
-          toName: 'Eric', 
-          promptKey: 'MOST_WORRIED', 
-          promptText: '最擔心嘅人',
-          nextPromptKey: 'FAVORITE_PERSON',
-          nextPromptText: '最喜歡嘅人'
-        }
-      ]
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(initialStore));
-    return initialStore;
-  }
-  return JSON.parse(json);
-};
-
-const saveDataToStore = (newStore: GlobalStore) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(newStore));
-};
-
-// ----------------------------------------
+import { supabase } from './lib/supabaseClient';
 
 function App() {
-  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.LANDING);
+  const [currentScreen, setCurrentScreen] = useState<Screen>(Screen.ADMIN);
   
   // App Data State
   const [globalStore, setGlobalStore] = useState<GlobalStore>({});
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   // Temporary state for the flow
   const [currentNewHolderName, setCurrentNewHolderName] = useState<string>('');
@@ -60,29 +25,71 @@ function App() {
     nextPromptText: string;
   } | null>(null);
 
+  // --- DATABASE FUNCTIONS ---
+
+  const fetchEvents = async () => {
+    setIsLoading(true);
+    try {
+      // Fetch all events from Supabase
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('timestamp', { ascending: true });
+
+      if (error) throw error;
+
+      // Group by keychain_id
+      const store: GlobalStore = {};
+      if (data) {
+        data.forEach((event: any) => {
+          const kId = event.keychain_id;
+          if (!store[kId]) store[kId] = [];
+          store[kId].push(event);
+        });
+      }
+      setGlobalStore(store);
+    } catch (err) {
+      console.error('Error fetching data:', err);
+      // Fallback for demo if no DB connection yet
+      if (Object.keys(globalStore).length === 0) {
+          // Do nothing or show alert
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveEventToCloud = async (event: HistoryEvent) => {
+    const { error } = await supabase
+      .from('events')
+      .insert([event]);
+    
+    if (error) {
+      console.error('Error saving to Supabase:', error);
+      alert('儲存失敗，請檢查網路或是 Database 設定');
+    }
+  };
+
+  // --------------------------
+
   // 1. Initialize Route & Data
   useEffect(() => {
-    // Load Database
-    const data = fetchAllData();
-    setGlobalStore(data);
+    fetchEvents();
 
     // Check URL for ID
     const params = new URLSearchParams(window.location.search);
     const idFromUrl = params.get('id');
 
     if (idFromUrl) {
-      // Validate ID (0-99)
       const numId = parseInt(idFromUrl, 10);
       if (!isNaN(numId) && numId >= 0 && numId <= 99) {
         setActiveId(idFromUrl);
         setCurrentScreen(Screen.LANDING);
       } else {
-        // Invalid ID, go to Admin
         window.history.replaceState(null, '', '/');
         setCurrentScreen(Screen.ADMIN);
       }
     } else {
-      // No ID, go to Admin
       setCurrentScreen(Screen.ADMIN);
     }
   }, []);
@@ -95,22 +102,22 @@ function App() {
     ? activeHistory[activeHistory.length - 1] 
     : {
         id: 'init',
+        keychain_id: activeId || '0',
         timestamp: Date.now(),
-        fromName: '大象工廠',
-        toName: '未啟動',
-        promptKey: 'START',
-        promptText: '旅程開始',
-        nextPromptKey: 'START',
-        nextPromptText: '第一位主人'
-      }; // Fallback for empty new keychains
+        from_name: '大象工廠',
+        to_name: '未啟動',
+        prompt_key: 'START',
+        prompt_text: '旅程開始',
+        next_prompt_key: 'START',
+        next_prompt_text: '第一位主人'
+      };
 
-  const lastHolderName = activeHistory.length > 0 ? lastEvent.toName : '沒有人';
+  const lastHolderName = activeHistory.length > 0 ? lastEvent.to_name : '沒有人';
 
   // --- Handlers ---
 
   const handleIdSelection = (id: string) => {
     setActiveId(id);
-    // Update URL without reloading
     const newUrl = `${window.location.pathname}?id=${id}`;
     window.history.pushState({ path: newUrl }, '', newUrl);
     setCurrentScreen(Screen.LANDING);
@@ -118,15 +125,15 @@ function App() {
 
   const handleBackToAdmin = () => {
     setActiveId(null);
-    const newUrl = window.location.pathname;
+    const newUrl = window.location.pathname; // Clear query params
     window.history.pushState({ path: newUrl }, '', newUrl);
     setCurrentScreen(Screen.ADMIN);
+    fetchEvents(); // Refresh data when going back to admin
   };
 
-  const handleNewHolderSubmit = (name: string) => {
+  const handleNewHolderSubmit = async (name: string) => {
     if (!activeId) return;
 
-    // Logic: If this is the VERY FIRST person (history empty), the logic is slightly different
     const isFirst = activeHistory.length === 0;
 
     // 1. Pick next prompt
@@ -136,31 +143,30 @@ function App() {
     // 2. Determine "Why I received it"
     const reasonIReceivedIt = isFirst 
       ? '這是一次偶然的相遇' 
-      : (lastEvent.nextPromptText || '命運的安排');
+      : (lastEvent.next_prompt_text || '命運的安排');
 
-    // 3. Create Event
+    // 3. Create Event Object
     const newEvent: HistoryEvent = {
       id: crypto.randomUUID(),
+      keychain_id: activeId,
       timestamp: Date.now(),
-      fromName: isFirst ? '大象女士' : lastHolderName,
-      toName: name,
-      promptKey: isFirst ? 'START' : (lastEvent.nextPromptKey || 'UNKNOWN'),
-      promptText: reasonIReceivedIt,
-      nextPromptKey: nextPrompt.key,
-      nextPromptText: nextPrompt.text
+      from_name: isFirst ? '大象女士' : lastHolderName,
+      to_name: name,
+      prompt_key: isFirst ? 'START' : (lastEvent.next_prompt_key || 'UNKNOWN'),
+      prompt_text: reasonIReceivedIt,
+      next_prompt_key: nextPrompt.key,
+      next_prompt_text: nextPrompt.text
     };
 
-    // 4. Update Global Store
+    // 4. Update UI Optimistically (Immediate Feedback)
     const newHistory = [...activeHistory, newEvent];
-    const newStore = {
-      ...globalStore,
-      [activeId]: newHistory
-    };
-
+    const newStore = { ...globalStore, [activeId]: newHistory };
     setGlobalStore(newStore);
-    saveDataToStore(newStore); // Sync to DB
 
-    // 5. Update Local State
+    // 5. Save to Cloud
+    await saveEventToCloud(newEvent);
+
+    // 6. Update Local State & Navigate
     setCurrentNewHolderName(name);
     setCurrentExplanationData({
       giverName: isFirst ? '大象女士' : lastHolderName,
@@ -168,24 +174,28 @@ function App() {
       nextPromptText: nextPrompt.text
     });
 
-    // 6. Navigate
     setCurrentScreen(Screen.EXPLANATION);
   };
 
   // --- Render Logic ---
 
+  if (isLoading && Object.keys(globalStore).length === 0) {
+    return (
+        <div className="min-h-screen flex items-center justify-center bg-stone-50">
+            <div className="animate-pulse flex flex-col items-center">
+                <div className="text-4xl mb-4">🐘</div>
+                <div className="text-stone-400 font-medium">載入大象旅程中...</div>
+            </div>
+        </div>
+    );
+  }
+
   const renderScreen = () => {
     switch (currentScreen) {
       case Screen.ADMIN:
-        return (
-          <AdminDashboard 
-            store={globalStore} 
-            onSelectId={handleIdSelection} 
-          />
-        );
+        return <AdminDashboard store={globalStore} onSelectId={handleIdSelection} />;
 
       case Screen.LANDING:
-        // Handle case where ID is selected but no history yet
         if (activeHistory.length === 0) {
            return (
             <Landing 
@@ -206,18 +216,10 @@ function App() {
         );
       
       case Screen.RETURNING:
-        return (
-          <Returning 
-            onViewHistory={() => setCurrentScreen(Screen.HISTORY)} 
-          />
-        );
+        return <Returning onViewHistory={() => setCurrentScreen(Screen.HISTORY)} />;
       
       case Screen.NEW_INPUT:
-        return (
-          <NewInput 
-            onSubmit={handleNewHolderSubmit} 
-          />
-        );
+        return <NewInput onSubmit={handleNewHolderSubmit} />;
 
       case Screen.EXPLANATION:
         if (!currentExplanationData) return null;
@@ -232,12 +234,7 @@ function App() {
         );
 
       case Screen.HISTORY:
-        return (
-          <HistoryView 
-            events={activeHistory} 
-            onBackHome={handleBackToAdmin}
-          />
-        );
+        return <HistoryView events={activeHistory} onBackHome={handleBackToAdmin} />;
 
       default:
         return <div>Error: Unknown screen</div>;
@@ -250,11 +247,9 @@ function App() {
         {renderScreen()}
       </div>
       
-      {/* Footer for Dev Context */}
-      <div className="fixed bottom-2 right-2 opacity-30 hover:opacity-100 transition-opacity pointer-events-none">
-        <span className="text-[10px] bg-stone-200 px-2 py-1 rounded text-stone-500">
-           {activeId ? `Keychain #${activeId}` : 'Admin View'}
-        </span>
+      {/* Connection Status Indicator */}
+      <div className="fixed bottom-2 right-2 opacity-50 text-[10px] text-stone-400 pointer-events-none">
+        {isLoading ? 'Syncing...' : 'Connected to Cloud'}
       </div>
     </div>
   );
