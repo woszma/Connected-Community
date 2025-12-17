@@ -1,19 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
-// 安全地取得環境變數
-const getEnv = (key: string) => {
-  try {
-    // @ts-ignore
-    return import.meta.env?.[key];
-  } catch (e) {
+// FIX: In Vite, environment variables must be accessed directly (e.g. import.meta.env.VITE_KEY)
+// for them to be statically replaced during the build process.
+// Dynamic access (like import.meta.env[key]) will result in 'undefined' in production builds.
+
+const getEnvVar = (key: string, value: string | undefined) => {
+  if (!value) {
     return undefined;
   }
+  return value;
 };
 
-const supabaseUrl = getEnv('VITE_SUPABASE_URL');
-const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
+// Access directly so Vite can bundle the values from your Secrets/Env
+const supabaseUrl = (import.meta as any).env.VITE_SUPABASE_URL;
+const supabaseAnonKey = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
 
-// 檢查是否設定了有效的 Supabase 變數
+// Check if configured
 export const isSupabaseConfigured = !!(
   supabaseUrl && 
   supabaseUrl.startsWith('http') && 
@@ -21,10 +23,15 @@ export const isSupabaseConfigured = !!(
 );
 
 if (!isSupabaseConfigured) {
-  console.warn('⚠️ Supabase 環境變數未設定 (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)。請檢查 .env 檔案。');
+  console.warn(
+    '⚠️ Supabase Config Missing. ' +
+    'Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file or Codespaces Secrets.'
+  );
 }
 
-// 建立 Client
+// Initialize Client
+// We provide fallback strings to prevent immediate crash on load, 
+// but queries will be blocked by the isSupabaseConfigured check in App.tsx
 export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co', 
   supabaseAnonKey || 'placeholder'

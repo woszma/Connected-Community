@@ -28,16 +28,15 @@ function App() {
   // --- DATA HANDLING ---
 
   const fetchEvents = async () => {
-    setIsLoading(true);
-
+    // If config is missing, stop immediately.
     if (!isSupabaseConfigured) {
-        console.error('Supabase not configured properly.');
         setIsLoading(false);
         return;
     }
 
+    setIsLoading(true);
+
     try {
-      // Updated table name to "NFC Keychain Journey events"
       const { data, error } = await supabase
         .from('NFC Keychain Journey events')
         .select('*')
@@ -76,7 +75,6 @@ function App() {
     setGlobalStore(newStore);
 
     // Save to Supabase
-    // Updated table name to "NFC Keychain Journey events"
     const { error } = await supabase
       .from('NFC Keychain Journey events')
       .insert([event]);
@@ -84,7 +82,6 @@ function App() {
     if (error) {
       console.error('Failed to save to cloud:', error);
       alert('儲存到雲端失敗，請檢查網絡。');
-      // In a real app, we might revert the optimistic update here on error
     }
   };
 
@@ -92,7 +89,11 @@ function App() {
 
   // Initialize
   useEffect(() => {
-    fetchEvents();
+    if (isSupabaseConfigured) {
+      fetchEvents();
+    } else {
+      setIsLoading(false);
+    }
 
     // Check URL for ID
     const params = new URLSearchParams(window.location.search);
@@ -203,6 +204,34 @@ function App() {
     );
   }
 
+  // 🔴 Error State: Config Missing
+  if (!isSupabaseConfigured) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-stone-50 p-6 text-center text-stone-800">
+        <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center text-3xl mb-4">
+          ⚠️
+        </div>
+        <h1 className="text-xl font-bold mb-2">尚未連接資料庫</h1>
+        <p className="text-stone-600 max-w-md mb-6 leading-relaxed">
+          應用程式無法讀取資料。請確認你已設定以下環境變數 (Secrets)：
+        </p>
+        <div className="bg-white p-4 rounded-lg border border-stone-200 shadow-sm text-left space-y-2 mb-6">
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${(import.meta as any).env.VITE_SUPABASE_URL ? 'bg-green-500' : 'bg-red-400'}`}></div>
+            <code className="text-sm font-mono bg-stone-100 px-1 rounded">VITE_SUPABASE_URL</code>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className={`w-3 h-3 rounded-full ${(import.meta as any).env.VITE_SUPABASE_ANON_KEY ? 'bg-green-500' : 'bg-red-400'}`}></div>
+            <code className="text-sm font-mono bg-stone-100 px-1 rounded">VITE_SUPABASE_ANON_KEY</code>
+          </div>
+        </div>
+        <p className="text-xs text-stone-400">
+           如果在 GitHub Codespaces，請重啟容器確保 Secrets 生效。
+        </p>
+      </div>
+    );
+  }
+
   const renderScreen = () => {
     switch (currentScreen) {
       case Screen.ADMIN:
@@ -260,17 +289,11 @@ function App() {
         {renderScreen()}
       </div>
       
-      {/* Connection Status Indicator - simplified for Supabase only */}
+      {/* Connection Status Indicator */}
       <div className="fixed bottom-2 right-2 flex items-center gap-2 pointer-events-none opacity-50 hover:opacity-100 transition-opacity">
-        {isSupabaseConfigured ? (
-            <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] rounded-md shadow-sm font-medium border border-green-200">
-               ☁️ Supabase Connected
-            </span>
-        ) : (
-            <span className="px-2 py-1 bg-red-100 text-red-700 text-[10px] rounded-md shadow-sm font-medium border border-red-200">
-               ⚠️ Config Missing
-            </span>
-        )}
+        <span className="px-2 py-1 bg-green-100 text-green-700 text-[10px] rounded-md shadow-sm font-medium border border-green-200">
+            ☁️ Supabase Active
+        </span>
       </div>
     </div>
   );
