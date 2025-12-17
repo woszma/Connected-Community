@@ -1,7 +1,6 @@
-/// <reference types="vite/client" />
 import { createClient } from '@supabase/supabase-js';
 
-// 安全地取得環境變數，避免在某些環境下 crash
+// 安全地取得環境變數
 const getEnv = (key: string) => {
   try {
     // @ts-ignore
@@ -14,18 +13,19 @@ const getEnv = (key: string) => {
 const supabaseUrl = getEnv('VITE_SUPABASE_URL');
 const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+// 檢查是否設定了有效的 Supabase 變數
+export const isSupabaseConfigured = !!(
+  supabaseUrl && 
+  supabaseUrl.startsWith('http') && 
+  supabaseAnonKey
+);
 
 if (!isSupabaseConfigured) {
-  console.warn(
-    '⚠️ Supabase 未設定或環境變數讀取失敗。\n' +
-    'App 將以「預覽模式」執行，資料不會儲存到雲端資料庫。'
-  );
+  console.warn('⚠️ Supabase 環境變數未設定 (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)。請檢查 .env 檔案。');
 }
 
-// 如果沒有 URL，使用假網址防止 createClient 報錯崩潰
-// 這樣 UI 仍然可以 render 出來供預覽
-const finalUrl = supabaseUrl || 'https://placeholder.supabase.co';
-const finalKey = supabaseAnonKey || 'placeholder-key';
-
-export const supabase = createClient(finalUrl, finalKey);
+// 建立 Client
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co', 
+  supabaseAnonKey || 'placeholder'
+);
