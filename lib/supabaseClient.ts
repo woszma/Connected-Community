@@ -1,8 +1,10 @@
+/// <reference types="vite/client" />
 import { createClient } from '@supabase/supabase-js';
 
-// Vite uses import.meta.env.VITE_...
-const SUPABASE_URL = (import.meta as any).env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
+// Accessing import.meta.env directly allows Vite to inject the environment variables during build.
+// Using (import.meta as any).env prevents this injection, causing a runtime error in the browser.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn(
@@ -11,8 +13,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-// 使用 Fallback 防止 createClient 因為空字串而直接讓 App 崩潰 (White Screen)
-// 這樣即使沒有設定 API Key，畫面仍然可以顯示，只是讀不到資料
+// Fallback to prevent invalid URL errors in Supabase client if keys are missing
 const url = SUPABASE_URL || 'https://placeholder.supabase.co';
 const key = SUPABASE_ANON_KEY || 'placeholder';
 
